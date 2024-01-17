@@ -24,13 +24,31 @@ class GPTWithContextViewProvider implements vscode.WebviewViewProvider {
     
     webviewView.webview.options = {
       enableScripts: true,
-			localResourceRoots: [vscode.Uri.joinPath(this._extensionUri, 'out')]
+			localResourceRoots: [vscode.Uri.joinPath(this._extensionUri, 'dist')]
     };
+
+    const webviewScriptUri1 = webviewView.webview.asWebviewUri(vscode.Uri.joinPath(
+      this._extensionUri, 'dist', 'webview.js'));
+    const webviewScriptUri2 = webviewView.webview.asWebviewUri(vscode.Uri.joinPath(
+      this._extensionUri, 'out', 'webview.js'));
+    const webviewScriptUri3 = webviewView.webview.asWebviewUri(vscode.Uri.joinPath(
+      this._extensionUri, 'media', 'webview.js'));
+    const webviewScriptUri4 = webviewView.webview.asWebviewUri(vscode.Uri.joinPath(
+      this._extensionUri, 'webview.js'));
+
+    // add this:          <vscode-button>VSCode button</vscode-button>
 
     webviewView.webview.html = `
       <html>
+        <head>
+          <script src="${webviewScriptUri1}"></script>
+          <script src="${webviewScriptUri2}"></script>
+          <script src="${webviewScriptUri3}"></script>
+          <script src="${webviewScriptUri4}"></script>
+        </head>
         <body>
           <h1>GPT with Context</h1>
+          <p>${webviewScriptUri1}</p>
           <p>Webview view</p>
           <button id="testButton">Test button</button>
           <vscode-button>VSCode button</vscode-button>
