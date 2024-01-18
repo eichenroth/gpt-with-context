@@ -11,9 +11,6 @@ class GPTWithContextTreeDataProvider implements vscode.TreeDataProvider<vscode.T
 	}
 }
 
-const FILES_TO_INCLUDE_KEY = 'gpt-with-context.filesToInclude';
-const FILES_TO_EXCLUDE_KEY = 'gpt-with-context.filesToExclude';
-
 class GPTWithContextViewProvider implements vscode.WebviewViewProvider {
   constructor(
 		private readonly _context: vscode.ExtensionContext,
@@ -146,17 +143,23 @@ class GPTWithContextViewProvider implements vscode.WebviewViewProvider {
   }
 }
 
+const FILES_TO_INCLUDE_KEY = 'gpt-with-context.filesToInclude';
+const FILES_TO_EXCLUDE_KEY = 'gpt-with-context.filesToExclude';
+
 export const activate = (context: vscode.ExtensionContext) => {
   console.log('GPT with Context extension activated');
 
-  context.subscriptions.push(vscode.window.registerWebviewViewProvider('gpt-with-context.MainView', new GPTWithContextViewProvider(context)));
+  const searchViewProvider = new GPTWithContextViewProvider(context);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider('gpt-with-context.MainView', searchViewProvider)
+  );
 
+  // TODO: remove
   context.subscriptions.push(
     vscode.commands.registerCommand('gpt-with-context.testCommand', () => {
       vscode.window.showInformationMessage('testcommand');
     })
   );
-
   context.subscriptions.push(
     vscode.commands.registerCommand('gpt-with-context.helloWorld', () => {
       vscode.window.showInformationMessage('Hello World from GPT with Context!');
