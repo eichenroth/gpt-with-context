@@ -11,12 +11,18 @@ class GPTWithContextTreeDataProvider implements vscode.TreeDataProvider<vscode.T
 	}
 }
 
+const FILES_TO_INCLUDE_KEY = 'gpt-with-context.filesToInclude';
+const FILES_TO_EXCLUDE_KEY = 'gpt-with-context.filesToExclude';
+
 class GPTWithContextViewProvider implements vscode.WebviewViewProvider {
   constructor(
 		private readonly _context: vscode.ExtensionContext,
   ) {}
 
   resolveWebviewView(webviewView: vscode.WebviewView) {
+    const filesToInclude = this._context.workspaceState.get<string>(FILES_TO_INCLUDE_KEY, '');
+    const filesToExclude = this._context.workspaceState.get<string>(FILES_TO_EXCLUDE_KEY, '');
+
     webviewView.webview.options = {
       enableScripts: true,
 			localResourceRoots: [vscode.Uri.joinPath(this._context.extensionUri, 'dist')],
@@ -32,15 +38,62 @@ class GPTWithContextViewProvider implements vscode.WebviewViewProvider {
           <p>This is the GPT with Context Plugin.<p>
           <p>It enables to chat with GPT whilst sending all your files to provide some context.</p>
 
-          <vscode-button id="test_button">Test Button</vscode-button>
+          <div>
+            <vscode-text-field
+              id="question_field"
+              placeholder="Ask me anything..."
+              style="width:100%;"
+            >
+            </vscode-text-field>
+          </div>
+          <div>
+            <vscode-text-field
+              id="files_to_include_field"
+              placeholder="e.g. *.ts, src/**/include"
+              value="${filesToInclude}"
+              style="width:100%;"
+            >
+              <span style="font-size:0.8em;">files to include</span>
+            </vscode-text-field>
+          </div>
+          <div>
+            <vscode-text-field
+              id="files_to_exclude_field"
+              placeholder="e.g. *.ts, src/**/exclude"
+              value="${filesToExclude}"
+              style="width:100%;"
+            >
+              <span style="font-size:0.8em;">files to exclude</span>
+            </vscode-text-field>
+          </div>
 
           <script>
             const vscode = acquireVsCodeApi();
+            const questionField = document.getElementById('question_field');
+            const filesToIncludeField = document.getElementById('files_to_include_field');
+            const filesToExcludeField = document.getElementById('files_to_exclude_field');
 
-            document.getElementById('test_button').addEventListener('click', () => {
+            questionField.addEventListener('keyup', (event) => {
+              if (event.key !== 'Enter') { return; }
+              if (event.shiftKey) { return; }
               vscode.postMessage({
-                command: 'command',
-                text: 'Test Button has been clicked!',
+                command: 'question',
+                text: questionField.value,
+              });
+              questionField.value = '';
+              event.preventDefault();
+            });
+
+            filesToIncludeField.addEventListener('input', (event) => {
+              vscode.postMessage({
+                command: 'setFilesToInclude',
+                value: filesToIncludeField.value,
+              });
+            });
+            filesToExcludeField.addEventListener('input', (event) => {
+              vscode.postMessage({
+                command: 'setFilesToExclude',
+                value: filesToExcludeField.value,
               });
             });
           </script>
@@ -49,7 +102,46 @@ class GPTWithContextViewProvider implements vscode.WebviewViewProvider {
     `;
 
     webviewView.webview.onDidReceiveMessage((message) => {
-      if (message.command === 'command') { vscode.window.showInformationMessage(message.text); }
+      if (message.command === 'question') { this._showQuestion(message.text); }
+      if (message.command === 'setFilesToInclude') { this._context.workspaceState.update(FILES_TO_INCLUDE_KEY, message.value); }
+      if (message.command === 'setFilesToExclude') { this._context.workspaceState.update(FILES_TO_EXCLUDE_KEY, message.value); }
+    });
+  }
+
+  private _showQuestion(question: string) {
+    vscode.window.showInformationMessage('Question: ' + question);
+  }
+
+  private async _findFiles(include: string, exclude: string) {
+    // TODO: use gitignore to search not all directories
+    const gitignoreFiles = await vscode.workspace.findFiles('**/.gitignore');
+    // TODO: detect encoding
+    const textDecoder = new TextDecoder('utf-8');
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0].uri.toString() ?? '';
+    const ignore = (await Promise.all(
+      gitignoreFiles.map(async (file) => {
+        const data = await vscode.workspace.fs.readFile(file);
+        const lines = textDecoder.decode(data).split(/\r?\n/);
+        const dir = file.with({ path: file.path.substring(0, file.path.lastIndexOf('/')) }).toString();
+
+        return lines
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0)
+          .filter((line) => !line.startsWith('#'))
+          // TODO: maybe support !/foo/bar
+          .filter((line) => !line.startsWith('!'))
+          .map((line) => `${dir}/${line}`.replace(workspaceFolder, ''))
+          .map((line) => line.replace(/\\/g, '/'));
+      })
+    ))
+      .flat()
+      .join(',');
+    const gitignore = '**/.gitignore';
+
+    console.log({ include, exclude, ignore, gitignore });
+    
+    vscode.workspace.findFiles(`{${include}}`, `{${exclude},${ignore},${gitignore}}`).then((files) => {
+      vscode.window.showInformationMessage('Files: ' + files.length);
     });
   }
 }
