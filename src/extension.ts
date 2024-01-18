@@ -99,13 +99,6 @@ class GPTWithContextViewProvider implements vscode.WebviewViewProvider {
               });
             });
 
-            // vscode.onMessage((message) => {
-            //   if (message.command === 'setFiles') {
-            //     const fileCount = document.getElementById('file_count');
-            //     fileCount.innerHTML = \`Files: \${message.value.length}\`;
-            //   }
-            // });
-
             window.addEventListener('message', (event) => {
               const message = event.data;
               if (message.command === 'setFiles') {
