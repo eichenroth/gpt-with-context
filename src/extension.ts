@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { State } from './State';
 
 class GPTWithContextTreeDataProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
   getTreeItem(element: vscode.TreeItem) { return element; }
@@ -14,11 +15,13 @@ class GPTWithContextTreeDataProvider implements vscode.TreeDataProvider<vscode.T
 class GPTWithContextViewProvider implements vscode.WebviewViewProvider {
   constructor(
 		private readonly _context: vscode.ExtensionContext,
+    private readonly _filesToIncludeState: State<string>,
+    private readonly _filesToExcludeState: State<string>,
   ) {}
 
   resolveWebviewView(webviewView: vscode.WebviewView) {
-    const filesToInclude = this._context.workspaceState.get<string>(FILES_TO_INCLUDE_KEY, '');
-    const filesToExclude = this._context.workspaceState.get<string>(FILES_TO_EXCLUDE_KEY, '');
+    const filesToInclude = this._filesToIncludeState.getValue();
+    const filesToExclude = this._filesToExcludeState.getValue();
 
     webviewView.webview.options = {
       enableScripts: true,
@@ -100,8 +103,8 @@ class GPTWithContextViewProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.onDidReceiveMessage((message) => {
       if (message.command === 'question') { this._showQuestion(message.text); }
-      if (message.command === 'setFilesToInclude') { this._context.workspaceState.update(FILES_TO_INCLUDE_KEY, message.value); }
-      if (message.command === 'setFilesToExclude') { this._context.workspaceState.update(FILES_TO_EXCLUDE_KEY, message.value); }
+      if (message.command === 'setFilesToInclude') { this._filesToIncludeState.setValue(message.value); }
+      if (message.command === 'setFilesToExclude') { this._filesToExcludeState.setValue(message.value); }
     });
   }
 
@@ -149,7 +152,10 @@ const FILES_TO_EXCLUDE_KEY = 'gpt-with-context.filesToExclude';
 export const activate = (context: vscode.ExtensionContext) => {
   console.log('GPT with Context extension activated');
 
-  const searchViewProvider = new GPTWithContextViewProvider(context);
+  const filesToIncludeState = new State<string>(context, FILES_TO_INCLUDE_KEY, '');
+  const filesToExcludeState = new State<string>(context, FILES_TO_EXCLUDE_KEY, '');
+
+  const searchViewProvider = new GPTWithContextViewProvider(context, filesToIncludeState, filesToExcludeState);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('gpt-with-context.MainView', searchViewProvider)
   );

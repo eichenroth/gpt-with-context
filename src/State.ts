@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
 
-export class SharedStateService<T> {
-  private onChangeEmitter = new vscode.EventEmitter<T>();
+export class State<T> {
+  private readonly onChangeEmitter = new vscode.EventEmitter<T>();
 
   public constructor(
-    private _context: vscode.ExtensionContext,
-    private _key: string,
-    private _initialValue: T
+    private readonly _context: vscode.ExtensionContext,
+    private readonly _key: string,
+    private readonly _initialValue: T
   ) {}
 
   public getValue(): T {
