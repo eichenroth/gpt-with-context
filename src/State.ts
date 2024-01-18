@@ -1,6 +1,37 @@
 import * as vscode from 'vscode';
 
-export class State<T> {
+export interface State<T> {
+  getValue(): T;
+  setValue(value: T): void;
+  subscribe(callback: (value: T) => void): vscode.Disposable;
+  unsubscribe(disposable: vscode.Disposable): void;
+}
+
+export class NonPersistentState<T> implements State<T> {
+  private readonly onChangeEmitter = new vscode.EventEmitter<T>();
+
+  public constructor(private _value: T) {}
+
+  public getValue(): T {
+    return this._value;
+  }
+
+  public setValue(value: T): void {
+    if (this._value === value) { return; }
+    this._value = value;
+    this.onChangeEmitter.fire(value);
+  }
+
+  public subscribe(callback: (value: T) => void): vscode.Disposable {
+    return this.onChangeEmitter.event(callback);
+  }
+
+  public unsubscribe(disposable: vscode.Disposable): void {
+    disposable.dispose();
+  }
+}
+
+export class PersistentState<T> implements State<T> {
   private readonly onChangeEmitter = new vscode.EventEmitter<T>();
 
   public constructor(
@@ -13,10 +44,11 @@ export class State<T> {
     return this._context.workspaceState.get<T>(this._key, this._initialValue);
   }
 
-  public async setValue(value: T): Promise<void> {
+  public setValue(value: T): void {
     if (this.getValue() === value) { return; }
-    await this._context.workspaceState.update(this._key, value);
-    this.onChangeEmitter.fire(value);
+    this._context.workspaceState.update(this._key, value).then(() => {
+      this.onChangeEmitter.fire(value);
+    });
   }
 
   public subscribe(callback: (value: T) => void): vscode.Disposable {

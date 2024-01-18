@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { State } from './State';
+import { NonPersistentState, PersistentState, State } from './State';
 
 class GPTWithContextTreeDataProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
   getTreeItem(element: vscode.TreeItem) { return element; }
@@ -17,6 +17,7 @@ class GPTWithContextViewProvider implements vscode.WebviewViewProvider {
 		private readonly _context: vscode.ExtensionContext,
     private readonly _filesToIncludeState: State<string>,
     private readonly _filesToExcludeState: State<string>,
+    private readonly _filesState: State<vscode.Uri[]>,
   ) {}
 
   resolveWebviewView(webviewView: vscode.WebviewView) {
@@ -66,6 +67,7 @@ class GPTWithContextViewProvider implements vscode.WebviewViewProvider {
               <span style="font-size:0.8em;">files to exclude</span>
             </vscode-text-field>
           </div>
+          <div id="file_count"></div>
 
           <script>
             const vscode = acquireVsCodeApi();
@@ -96,6 +98,22 @@ class GPTWithContextViewProvider implements vscode.WebviewViewProvider {
                 value: filesToExcludeField.value,
               });
             });
+
+            // vscode.onMessage((message) => {
+            //   if (message.command === 'setFiles') {
+            //     const fileCount = document.getElementById('file_count');
+            //     fileCount.innerHTML = \`Files: \${message.value.length}\`;
+            //   }
+            // });
+
+            window.addEventListener('message', (event) => {
+              const message = event.data;
+              if (message.command === 'setFiles') {
+                const fileCount = document.getElementById('file_count');
+                fileCount.innerHTML = \`Files: \${message.value.length}\`;
+              }
+            });
+
           </script>
         </body>
       </html>
@@ -106,44 +124,52 @@ class GPTWithContextViewProvider implements vscode.WebviewViewProvider {
       if (message.command === 'setFilesToInclude') { this._filesToIncludeState.setValue(message.value); }
       if (message.command === 'setFilesToExclude') { this._filesToExcludeState.setValue(message.value); }
     });
+
+    this._filesState.subscribe((files) => {
+      console.log(files);
+      webviewView.webview.postMessage({
+        command: 'setFiles',
+        value: files,
+      });
+    });
   }
 
   private _showQuestion(question: string) {
     vscode.window.showInformationMessage('Question: ' + question);
   }
 
-  private async _findFiles(include: string, exclude: string) {
-    // TODO: use gitignore to search not all directories
-    const gitignoreFiles = await vscode.workspace.findFiles('**/.gitignore');
-    // TODO: detect encoding
-    const textDecoder = new TextDecoder('utf-8');
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0].uri.toString() ?? '';
-    const ignore = (await Promise.all(
-      gitignoreFiles.map(async (file) => {
-        const data = await vscode.workspace.fs.readFile(file);
-        const lines = textDecoder.decode(data).split(/\r?\n/);
-        const dir = file.with({ path: file.path.substring(0, file.path.lastIndexOf('/')) }).toString();
+  // private async _findFiles(include: string, exclude: string) {
+  //   // TODO: use gitignore to search not all directories
+  //   const gitignoreFiles = await vscode.workspace.findFiles('**/.gitignore');
+  //   // TODO: detect encoding
+  //   const textDecoder = new TextDecoder('utf-8');
+  //   const workspaceFolder = vscode.workspace.workspaceFolders?.[0].uri.toString() ?? '';
+  //   const ignore = (await Promise.all(
+  //     gitignoreFiles.map(async (file) => {
+  //       const data = await vscode.workspace.fs.readFile(file);
+  //       const lines = textDecoder.decode(data).split(/\r?\n/);
+  //       const dir = file.with({ path: file.path.substring(0, file.path.lastIndexOf('/')) }).toString();
 
-        return lines
-          .map((line) => line.trim())
-          .filter((line) => line.length > 0)
-          .filter((line) => !line.startsWith('#'))
-          // TODO: maybe support !/foo/bar
-          .filter((line) => !line.startsWith('!'))
-          .map((line) => `${dir}/${line}`.replace(workspaceFolder, ''))
-          .map((line) => line.replace(/\\/g, '/'));
-      })
-    ))
-      .flat()
-      .join(',');
-    const gitignore = '**/.gitignore';
+  //       return lines
+  //         .map((line) => line.trim())
+  //         .filter((line) => line.length > 0)
+  //         .filter((line) => !line.startsWith('#'))
+  //         // TODO: maybe support !/foo/bar
+  //         .filter((line) => !line.startsWith('!'))
+  //         .map((line) => `${dir}/${line}`.replace(workspaceFolder, ''))
+  //         .map((line) => line.replace(/\\/g, '/'));
+  //     })
+  //   ))
+  //     .flat()
+  //     .join(',');
+  //   const gitignore = '**/.gitignore';
 
-    console.log({ include, exclude, ignore, gitignore });
+  //   console.log({ include, exclude, ignore, gitignore });
     
-    vscode.workspace.findFiles(`{${include}}`, `{${exclude},${ignore},${gitignore}}`).then((files) => {
-      vscode.window.showInformationMessage('Files: ' + files.length);
-    });
-  }
+  //   vscode.workspace.findFiles(`{${include}}`, `{${exclude},${ignore},${gitignore}}`).then((files) => {
+  //     vscode.window.showInformationMessage('Files: ' + files.length);
+  //   });
+  // }
 }
 
 const FILES_TO_INCLUDE_KEY = 'gpt-with-context.filesToInclude';
@@ -152,13 +178,27 @@ const FILES_TO_EXCLUDE_KEY = 'gpt-with-context.filesToExclude';
 export const activate = (context: vscode.ExtensionContext) => {
   console.log('GPT with Context extension activated');
 
-  const filesToIncludeState = new State<string>(context, FILES_TO_INCLUDE_KEY, '');
-  const filesToExcludeState = new State<string>(context, FILES_TO_EXCLUDE_KEY, '');
+  const filesToIncludeState = new PersistentState<string>(context, FILES_TO_INCLUDE_KEY, '');
+  const filesToExcludeState = new PersistentState<string>(context, FILES_TO_EXCLUDE_KEY, '');
+  const filesState = new NonPersistentState<vscode.Uri[]>([]);
 
-  const searchViewProvider = new GPTWithContextViewProvider(context, filesToIncludeState, filesToExcludeState);
+  const searchViewProvider = new GPTWithContextViewProvider(context, filesToIncludeState, filesToExcludeState, filesState);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('gpt-with-context.MainView', searchViewProvider)
   );
+
+  filesToIncludeState.subscribe(async () => {
+    const filesToInclude = filesToIncludeState.getValue();
+    const filesToExclude = filesToExcludeState.getValue();
+    const files = await findFiles(filesToInclude, filesToExclude);
+    filesState.setValue(files);
+  });
+  filesToExcludeState.subscribe(async () => {
+    const filesToInclude = filesToIncludeState.getValue();
+    const filesToExclude = filesToExcludeState.getValue();
+    const files = await findFiles(filesToInclude, filesToExclude);
+    filesState.setValue(files);
+  });
 
   // TODO: remove
   context.subscriptions.push(
@@ -174,3 +214,32 @@ export const activate = (context: vscode.ExtensionContext) => {
 };
 
 export const deactivate = () => {};
+
+const findFiles = async (include: string, exclude: string) => {
+  // TODO: use gitignore to search not all directories
+  const gitignoreFiles = await vscode.workspace.findFiles('**/.gitignore');
+  // TODO: detect encoding
+  const textDecoder = new TextDecoder('utf-8');
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0].uri.toString() ?? '';
+  const ignore = (await Promise.all(
+    gitignoreFiles.map(async (file) => {
+      const data = await vscode.workspace.fs.readFile(file);
+      const lines = textDecoder.decode(data).split(/\r?\n/);
+      const dir = file.with({ path: file.path.substring(0, file.path.lastIndexOf('/')) }).toString();
+
+      return lines
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .filter((line) => !line.startsWith('#'))
+        // TODO: maybe support !/foo/bar
+        .filter((line) => !line.startsWith('!'))
+        .map((line) => `${dir}/${line}`.replace(workspaceFolder, ''))
+        .map((line) => line.replace(/\\/g, '/'));
+    })
+  ))
+    .flat()
+    .join(',');
+  const gitignore = '**/.gitignore';
+
+  return await vscode.workspace.findFiles(`{${include}}`, `{${exclude},${ignore},${gitignore}}`);
+};
