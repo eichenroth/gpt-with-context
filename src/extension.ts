@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { simpleGit } from 'simple-git';
 import { NonPersistentState, PersistentState, State } from './State';
 
 class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
@@ -111,7 +112,6 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
     });
 
     this._filesState.subscribe((files) => {
-      console.log(files);
       webviewView.webview.postMessage({
         command: 'setFiles',
         value: files,
@@ -137,12 +137,12 @@ class GPTWithContextResultTreeDataProvidery implements vscode.TreeDataProvider<v
   getTreeItem(element: vscode.TreeItem) { return element; }
 	getChildren(element?: vscode.TreeItem) {
 		if (element) { return []; }
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0].uri.toString() ?? '';
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0].uri.path ?? '';
     return this._filesState.getValue()
-      .map((file) => file.toString())
-      .map((fileName) => fileName.replace(workspaceFolder, ''))
-      .map((fileName) => {
-        const treeItem = new vscode.TreeItem(fileName);
+      .map((file) => file.path)
+      .map((path) => path.replace(workspaceFolder, ''))
+      .map((path) => {
+        const treeItem = new vscode.TreeItem(path);
         return treeItem;
       });
 	}
@@ -197,30 +197,25 @@ export const activate = (context: vscode.ExtensionContext) => {
 export const deactivate = () => {};
 
 const findFiles = async (include: string, exclude: string) => {
-  // TODO: use gitignore to search not all directories
-  const gitignoreFiles = await vscode.workspace.findFiles('**/.gitignore');
-  // TODO: detect encoding
-  const textDecoder = new TextDecoder('utf-8');
-  const workspaceFolder = vscode.workspace.workspaceFolders?.[0].uri.toString() ?? '';
-  const ignore = (await Promise.all(
-    gitignoreFiles.map(async (file) => {
-      const data = await vscode.workspace.fs.readFile(file);
-      const lines = textDecoder.decode(data).split(/\r?\n/);
-      const dir = file.with({ path: file.path.substring(0, file.path.lastIndexOf('/')) }).toString();
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0].uri.path ?? '';
 
-      return lines
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-        .filter((line) => !line.startsWith('#'))
-        // TODO: maybe support !/foo/bar
-        .filter((line) => !line.startsWith('!'))
-        .map((line) => `${dir}/${line}`.replace(workspaceFolder, ''))
-        .map((line) => line.replace(/\\/g, '/'));
-    })
-  ))
-    .flat()
-    .join(',');
-  const gitignore = '**/.gitignore';
+  const git = simpleGit({
+    baseDir: workspaceFolder,
+    maxConcurrentProcesses: 6,
+  });
 
-  return await vscode.workspace.findFiles(`{${include}}`, `{${exclude},${ignore},${gitignore}}`);
+  const extraIgnore = '**/.gitignore';
+
+  const files = await vscode.workspace.findFiles(`{${include}}`, `{${exclude},${extraIgnore}}`);
+  const filteredFiles = (await Promise.all(files.map(async (file) => {
+    const keepFile = await new Promise<boolean>((resolve, reject) => {
+      git.checkIgnore(file.path, (error, ignored) => {
+        if (error) { reject(error); }
+        resolve(ignored.length === 0);
+      });
+    });
+    if (keepFile) { return file; }
+  }))).filter((file): file is vscode.Uri => file !== undefined);
+
+  return filteredFiles;
 };
