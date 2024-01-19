@@ -204,7 +204,7 @@ const findFiles = async (include: string, exclude: string) => {
     maxConcurrentProcesses: 6,
   });
 
-  const extraIgnore = '**/.gitignore';
+  const extraIgnore = '**/.gitignore,**/.git/**';
 
   const files = await vscode.workspace.findFiles(`{${include}}`, `{${exclude},${extraIgnore}}`);
   const filteredFiles = (await Promise.all(files.map(async (file) => {
