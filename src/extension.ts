@@ -1,18 +1,7 @@
 import * as vscode from 'vscode';
 import { NonPersistentState, PersistentState, State } from './State';
 
-class GPTWithContextTreeDataProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
-  getTreeItem(element: vscode.TreeItem) { return element; }
-	getChildren(element?: vscode.TreeItem) {
-		if (element) { return []; }
-		return [
-			new vscode.TreeItem('Tree item A'),
-			new vscode.TreeItem('Tree item B'),
-		];
-	}
-}
-
-class GPTWithContextViewProvider implements vscode.WebviewViewProvider {
+class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
   constructor(
 		private readonly _context: vscode.ExtensionContext,
     private readonly _filesToIncludeState: State<string>,
@@ -47,7 +36,8 @@ class GPTWithContextViewProvider implements vscode.WebviewViewProvider {
             >
             </vscode-text-field>
           </div>
-          <div>
+
+          <div style="margin-top:2px">
             <vscode-text-field
               id="files_to_include_field"
               placeholder="e.g. *.ts, src/**/include"
@@ -56,8 +46,6 @@ class GPTWithContextViewProvider implements vscode.WebviewViewProvider {
             >
               <span style="font-size:0.8em;">files to include</span>
             </vscode-text-field>
-          </div>
-          <div>
             <vscode-text-field
               id="files_to_exclude_field"
               placeholder="e.g. *.ts, src/**/exclude"
@@ -67,7 +55,11 @@ class GPTWithContextViewProvider implements vscode.WebviewViewProvider {
               <span style="font-size:0.8em;">files to exclude</span>
             </vscode-text-field>
           </div>
-          <div id="file_count"></div>
+
+          <div style="margin-top:4px">
+            <span id="file_count">0</span> files
+          </div>
+          
 
           <script>
             const vscode = acquireVsCodeApi();
@@ -103,7 +95,7 @@ class GPTWithContextViewProvider implements vscode.WebviewViewProvider {
               const message = event.data;
               if (message.command === 'setFiles') {
                 const fileCount = document.getElementById('file_count');
-                fileCount.innerHTML = \`Files: \${message.value.length}\`;
+                fileCount.innerHTML = message.value.length.toString();
               }
             });
 
@@ -130,39 +122,18 @@ class GPTWithContextViewProvider implements vscode.WebviewViewProvider {
   private _showQuestion(question: string) {
     vscode.window.showInformationMessage('Question: ' + question);
   }
+}
 
-  // private async _findFiles(include: string, exclude: string) {
-  //   // TODO: use gitignore to search not all directories
-  //   const gitignoreFiles = await vscode.workspace.findFiles('**/.gitignore');
-  //   // TODO: detect encoding
-  //   const textDecoder = new TextDecoder('utf-8');
-  //   const workspaceFolder = vscode.workspace.workspaceFolders?.[0].uri.toString() ?? '';
-  //   const ignore = (await Promise.all(
-  //     gitignoreFiles.map(async (file) => {
-  //       const data = await vscode.workspace.fs.readFile(file);
-  //       const lines = textDecoder.decode(data).split(/\r?\n/);
-  //       const dir = file.with({ path: file.path.substring(0, file.path.lastIndexOf('/')) }).toString();
+class GPTWithContextResultTreeDataProvidery implements vscode.TreeDataProvider<vscode.TreeItem> {
+  constructor(
+    private readonly _filesState: State<vscode.Uri[]>,
+  ) {}
 
-  //       return lines
-  //         .map((line) => line.trim())
-  //         .filter((line) => line.length > 0)
-  //         .filter((line) => !line.startsWith('#'))
-  //         // TODO: maybe support !/foo/bar
-  //         .filter((line) => !line.startsWith('!'))
-  //         .map((line) => `${dir}/${line}`.replace(workspaceFolder, ''))
-  //         .map((line) => line.replace(/\\/g, '/'));
-  //     })
-  //   ))
-  //     .flat()
-  //     .join(',');
-  //   const gitignore = '**/.gitignore';
-
-  //   console.log({ include, exclude, ignore, gitignore });
-    
-  //   vscode.workspace.findFiles(`{${include}}`, `{${exclude},${ignore},${gitignore}}`).then((files) => {
-  //     vscode.window.showInformationMessage('Files: ' + files.length);
-  //   });
-  // }
+  getTreeItem(element: vscode.TreeItem) { return element; }
+	getChildren(element?: vscode.TreeItem) {
+		if (element) { return []; }
+    return this._filesState.getValue().map((file) => new vscode.TreeItem(file.toString()));
+	}  
 }
 
 const FILES_TO_INCLUDE_KEY = 'gpt-with-context.filesToInclude';
@@ -175,9 +146,14 @@ export const activate = (context: vscode.ExtensionContext) => {
   const filesToExcludeState = new PersistentState<string>(context, FILES_TO_EXCLUDE_KEY, '');
   const filesState = new NonPersistentState<vscode.Uri[]>([]);
 
-  const searchViewProvider = new GPTWithContextViewProvider(context, filesToIncludeState, filesToExcludeState, filesState);
+  const searchViewProvider = new GPTWithContextSearchViewProvider(context, filesToIncludeState, filesToExcludeState, filesState);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('gpt-with-context.MainView', searchViewProvider)
+  );
+
+  const resultViewProvider = new GPTWithContextResultTreeDataProvidery(filesState);
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider('gpt-with-context.ResultView', resultViewProvider)
   );
 
   filesToIncludeState.subscribe(async () => {
