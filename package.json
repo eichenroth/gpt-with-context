@@ -41,7 +41,7 @@
         {
           "id": "gpt-with-context.ResultView",
           "name": "File Selection",
-          "show": true
+          "show": false
         }
       ]
     }
