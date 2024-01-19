@@ -125,15 +125,27 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
 }
 
 class GPTWithContextResultTreeDataProvidery implements vscode.TreeDataProvider<vscode.TreeItem> {
+  private _onDidChangeTreeData = new vscode.EventEmitter<undefined>();
+  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+
   constructor(
     private readonly _filesState: State<vscode.Uri[]>,
-  ) {}
+  ) {
+    this._filesState.subscribe(() => this._onDidChangeTreeData.fire(undefined));
+  }
 
   getTreeItem(element: vscode.TreeItem) { return element; }
 	getChildren(element?: vscode.TreeItem) {
 		if (element) { return []; }
-    return this._filesState.getValue().map((file) => new vscode.TreeItem(file.toString()));
-	}  
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0].uri.toString() ?? '';
+    return this._filesState.getValue()
+      .map((file) => file.toString())
+      .map((fileName) => fileName.replace(workspaceFolder, ''))
+      .map((fileName) => {
+        const treeItem = new vscode.TreeItem(fileName);
+        return treeItem;
+      });
+	}
 }
 
 const FILES_TO_INCLUDE_KEY = 'gpt-with-context.filesToInclude';
