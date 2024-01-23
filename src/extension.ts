@@ -2,13 +2,16 @@ import * as vscode from 'vscode';
 import { NonPersistentState, PersistentState, State } from './State';
 import { gitignore2glob } from './gitignore2glob';
 
+type FileMeta = { file: vscode.Uri; locCount: number; charCount: number; };
+
 class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
   constructor(
 		private readonly _context: vscode.ExtensionContext,
     private readonly _filesToIncludeState: State<string>,
     private readonly _filesToExcludeState: State<string>,
     private readonly _filesState: State<vscode.Uri[]>,
-    private readonly _triggerSearch: () => void,
+    private readonly _filesMetasState: State<FileMeta[]>,
+    private readonly _search: () => void,
   ) {}
 
   resolveWebviewView(webviewView: vscode.WebviewView) {
@@ -32,7 +35,7 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
 
             <div style="flex-grow:1;padding-left:20px;padding-right:20px;padding-top:0px;padding-bottom:16px;">
               <div id="welcome">
-                <p>Welcome to GPT with Context!<p>
+                <p>Welcome to GPT with Context!</p>
                 <p>Utilize the full 128k context power by sending all your files to GPT.</p>
               </div>
               <div id="chat"></div>
@@ -69,10 +72,11 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
               </div>
 
               <div style="margin-top:4px">
-                <span id="file_count">0</span> files
+                <span id="file_count">0</span> files,
+                <span id="loc_count">0</span> loc,
+                <span id="char_count">0</span> chars
               </div>
             </div>
-          
           </div>
           
 
@@ -81,6 +85,10 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
             const questionField = document.getElementById('question_field');
             const filesToIncludeField = document.getElementById('files_to_include_field');
             const filesToExcludeField = document.getElementById('files_to_exclude_field');
+
+            const fileCountDisplay = document.getElementById('file_count');
+            const locCountDisplay = document.getElementById('loc_count');
+            const charCountDisplay = document.getElementById('char_count');
 
             questionField.addEventListener('keyup', (event) => {
               if (event.key !== 'Enter') { return; }
@@ -121,8 +129,11 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
             window.addEventListener('message', (event) => {
               const message = event.data;
               if (message.command === 'setFiles') {
-                const fileCount = document.getElementById('file_count');
-                fileCount.innerHTML = message.value.length.toString();
+                fileCountDisplay.innerHTML = message.value.length.toString();
+              }
+              if (message.command === 'setFilesMetas') {
+                locCountDisplay.innerHTML = message.value.reduce((sum, fileMeta) => sum + fileMeta.locCount, 0).toString();
+                charCountDisplay.innerHTML = message.value.reduce((sum, fileMeta) => sum + fileMeta.charCount, 0).toString();
               }
             });
 
@@ -135,11 +146,14 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
       if (message.command === 'question') { this._showQuestion(message.text); }
       if (message.command === 'setFilesToInclude') { this._filesToIncludeState.setValue(message.value); }
       if (message.command === 'setFilesToExclude') { this._filesToExcludeState.setValue(message.value); }
-      if (message.command === 'triggerSearch') { this._triggerSearch(); }
+      if (message.command === 'triggerSearch') { this._search(); }
     });
 
     this._filesState.subscribe((files) => {
       webviewView.webview.postMessage({ command: 'setFiles', value: files });
+    });
+    this._filesMetasState.subscribe((filesMetas) => {
+      webviewView.webview.postMessage({ command: 'setFilesMetas', value: filesMetas });
     });
   }
 
@@ -181,15 +195,16 @@ export const activate = (context: vscode.ExtensionContext) => {
   const filesToIncludeState = new PersistentState<string>(context, FILES_TO_INCLUDE_KEY, '');
   const filesToExcludeState = new PersistentState<string>(context, FILES_TO_EXCLUDE_KEY, '');
   const filesState = new NonPersistentState<vscode.Uri[]>([]);
+  const filesMetasState = new NonPersistentState<FileMeta[]>([]);
 
-  const triggerSearch = async () => {
+  const search = async () => {
     const filesToInclude = filesToIncludeState.getValue();
     const filesToExclude = filesToExcludeState.getValue();
     filesState.setValue(await findFiles(filesToInclude, filesToExclude));
   };
 
   const searchViewProvider = new GPTWithContextSearchViewProvider(
-    context, filesToIncludeState, filesToExcludeState, filesState, triggerSearch,
+    context, filesToIncludeState, filesToExcludeState, filesState, filesMetasState, search,
   );
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('gpt-with-context.MainView', searchViewProvider)
@@ -200,8 +215,10 @@ export const activate = (context: vscode.ExtensionContext) => {
     vscode.window.registerTreeDataProvider('gpt-with-context.ResultView', resultViewProvider)
   );
 
-  filesToIncludeState.subscribe(triggerSearch);
-  filesToExcludeState.subscribe(triggerSearch);
+  filesToIncludeState.subscribe(search);
+  filesToExcludeState.subscribe(search);
+
+  filesState.subscribe(async (files) => { filesMetasState.setValue(await getFileMetas(files)); });
 
   // TODO: remove
   context.subscriptions.push(
@@ -218,7 +235,7 @@ export const activate = (context: vscode.ExtensionContext) => {
 
 export const deactivate = () => {};
 
-const findFiles = async (include: string, exclude: string) => {
+const findFiles = async (include: string, exclude: string): Promise<vscode.Uri[]> => {
   console.info('finding files', {include, exclude});
   
   // TODO: use all gitignore files with '**/.gitinore'
@@ -233,4 +250,15 @@ const findFiles = async (include: string, exclude: string) => {
   const extraIgnore = '**/.gitignore,**/.git/**';
   const files = await vscode.workspace.findFiles(`{${include}}`, `{${exclude},${ignore},${extraIgnore}}`);
   return files;
+};
+
+const getFileMetas = async (files: vscode.Uri[]): Promise<FileMeta[]> => {
+  return await Promise.all(
+    files.map(async (file) => {
+      const content = (await vscode.workspace.fs.readFile(file)).toString();
+      const locCount = content.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0).length;
+      const charCount = content.length;
+      return { file, locCount, charCount };
+    }
+  ));
 };
