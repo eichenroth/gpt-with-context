@@ -8,6 +8,7 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
     private readonly _filesToIncludeState: State<string>,
     private readonly _filesToExcludeState: State<string>,
     private readonly _filesState: State<vscode.Uri[]>,
+    private readonly _triggerSearch: () => void,
   ) {}
 
   resolveWebviewView(webviewView: vscode.WebviewView) {
@@ -85,11 +86,23 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
                 value: filesToIncludeField.value,
               });
             });
+            filesToIncludeField.addEventListener('keyup', (event) => {
+              if (event.key !== 'Enter') { return; }
+              if (event.shiftKey) { return; }
+              vscode.postMessage({ command: 'triggerSearch' });
+              event.preventDefault();
+            });
             filesToExcludeField.addEventListener('input', (event) => {
               vscode.postMessage({
                 command: 'setFilesToExclude',
                 value: filesToExcludeField.value,
               });
+            });
+            filesToExcludeField.addEventListener('keyup', (event) => {
+              if (event.key !== 'Enter') { return; }
+              if (event.shiftKey) { return; }
+              vscode.postMessage({ command: 'triggerSearch' });
+              event.preventDefault();
             });
 
             window.addEventListener('message', (event) => {
@@ -109,13 +122,11 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
       if (message.command === 'question') { this._showQuestion(message.text); }
       if (message.command === 'setFilesToInclude') { this._filesToIncludeState.setValue(message.value); }
       if (message.command === 'setFilesToExclude') { this._filesToExcludeState.setValue(message.value); }
+      if (message.command === 'triggerSearch') { this._triggerSearch(); }
     });
 
     this._filesState.subscribe((files) => {
-      webviewView.webview.postMessage({
-        command: 'setFiles',
-        value: files,
-      });
+      webviewView.webview.postMessage({ command: 'setFiles', value: files });
     });
   }
 
@@ -158,7 +169,15 @@ export const activate = (context: vscode.ExtensionContext) => {
   const filesToExcludeState = new PersistentState<string>(context, FILES_TO_EXCLUDE_KEY, '');
   const filesState = new NonPersistentState<vscode.Uri[]>([]);
 
-  const searchViewProvider = new GPTWithContextSearchViewProvider(context, filesToIncludeState, filesToExcludeState, filesState);
+  const triggerSearch = async () => {
+    const filesToInclude = filesToIncludeState.getValue();
+    const filesToExclude = filesToExcludeState.getValue();
+    filesState.setValue(await findFiles(filesToInclude, filesToExclude));
+  };
+
+  const searchViewProvider = new GPTWithContextSearchViewProvider(
+    context, filesToIncludeState, filesToExcludeState, filesState, triggerSearch,
+  );
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('gpt-with-context.MainView', searchViewProvider)
   );
@@ -168,18 +187,8 @@ export const activate = (context: vscode.ExtensionContext) => {
     vscode.window.registerTreeDataProvider('gpt-with-context.ResultView', resultViewProvider)
   );
 
-  filesToIncludeState.subscribe(async () => {
-    const filesToInclude = filesToIncludeState.getValue();
-    const filesToExclude = filesToExcludeState.getValue();
-    const files = await findFiles(filesToInclude, filesToExclude);
-    filesState.setValue(files);
-  });
-  filesToExcludeState.subscribe(async () => {
-    const filesToInclude = filesToIncludeState.getValue();
-    const filesToExclude = filesToExcludeState.getValue();
-    const files = await findFiles(filesToInclude, filesToExclude);
-    filesState.setValue(files);
-  });
+  filesToIncludeState.subscribe(triggerSearch);
+  filesToExcludeState.subscribe(triggerSearch);
 
   // TODO: remove
   context.subscriptions.push(
