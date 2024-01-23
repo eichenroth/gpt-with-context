@@ -78,7 +78,6 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
               </div>
             </div>
           </div>
-          
 
           <script>
             const vscode = acquireVsCodeApi();
@@ -167,20 +166,25 @@ class GPTWithContextResultTreeDataProvidery implements vscode.TreeDataProvider<v
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   constructor(
-    private readonly _filesState: State<vscode.Uri[]>,
+    private readonly _fileMetasState: State<FileMeta[]>,
   ) {
-    this._filesState.subscribe(() => this._onDidChangeTreeData.fire(undefined));
+    this._fileMetasState.subscribe(() => this._onDidChangeTreeData.fire(undefined));
   }
 
   getTreeItem(element: vscode.TreeItem) { return element; }
 	getChildren(element?: vscode.TreeItem) {
 		if (element) { return []; }
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0].uri.path ?? '';
-    return this._filesState.getValue()
-      .map((file) => file.path)
-      .map((path) => path.replace(workspaceFolder, ''))
-      .map((path) => {
-        const treeItem = new vscode.TreeItem(path);
+    return this._fileMetasState.getValue()
+      .map((fileMeta) => {
+        const treeItem = new vscode.TreeItem(fileMeta.file.path.replace(workspaceFolder, ''));
+        treeItem.resourceUri = fileMeta.file;
+        treeItem.command = {
+          command: 'vscode.open',
+          title: 'Open File',
+          arguments: [vscode.Uri.file(fileMeta.file.path)],
+        };
+        treeItem.description = `${fileMeta.locCount} loc, ${fileMeta.charCount} chars`;
         return treeItem;
       });
 	}
@@ -210,7 +214,7 @@ export const activate = (context: vscode.ExtensionContext) => {
     vscode.window.registerWebviewViewProvider('gpt-with-context.MainView', searchViewProvider)
   );
 
-  const resultViewProvider = new GPTWithContextResultTreeDataProvidery(filesState);
+  const resultViewProvider = new GPTWithContextResultTreeDataProvidery(filesMetasState);
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('gpt-with-context.ResultView', resultViewProvider)
   );
