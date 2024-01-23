@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { simpleGit } from 'simple-git';
 import { NonPersistentState, PersistentState, State } from './State';
+import { gitignore2glob } from './gitignore2glob';
 
 class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
   constructor(
@@ -197,25 +197,18 @@ export const activate = (context: vscode.ExtensionContext) => {
 export const deactivate = () => {};
 
 const findFiles = async (include: string, exclude: string) => {
-  const workspaceFolder = vscode.workspace.workspaceFolders?.[0].uri.path ?? '';
-
-  const git = simpleGit({
-    baseDir: workspaceFolder,
-    maxConcurrentProcesses: 6,
-  });
+  console.info('finding files', {include, exclude});
+  
+  // TODO: use all gitignore files with '**/.gitinore'
+  const ignoreFiles = await vscode.workspace.findFiles('.gitignore');
+  let ignore = '';
+  if (ignoreFiles.length > 0) {
+    const ignoreContent = (await vscode.workspace.fs.readFile(ignoreFiles[0])).toString();
+    ignore = gitignore2glob(ignoreContent).join(',');
+  }
+  console.info('ignore from gitignore', { ignore });
 
   const extraIgnore = '**/.gitignore,**/.git/**';
-
-  const files = await vscode.workspace.findFiles(`{${include}}`, `{${exclude},${extraIgnore}}`);
-  const filteredFiles = (await Promise.all(files.map(async (file) => {
-    const keepFile = await new Promise<boolean>((resolve, reject) => {
-      git.checkIgnore(file.path, (error, ignored) => {
-        if (error) { reject(error); }
-        resolve(ignored.length === 0);
-      });
-    });
-    if (keepFile) { return file; }
-  }))).filter((file): file is vscode.Uri => file !== undefined);
-
-  return filteredFiles;
+  const files = await vscode.workspace.findFiles(`{${include}}`, `{${exclude},${ignore},${extraIgnore}}`);
+  return files;
 };
