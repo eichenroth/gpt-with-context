@@ -23,43 +23,56 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
     const scriptUri = webviewView.webview.asWebviewUri(vscode.Uri.joinPath(
       this._context.extensionUri, 'dist', 'webview.js'));
     webviewView.webview.html = `
-      <html>
-        <body>
+      <html style="height:100%;">
+        <head>
           <script src="${scriptUri}"></script>
+        </head>
+        <body style="height:100%;margin:0;padding:0;">
+          <div style="display:flex;flex-direction:column;align-items:flex-start;height:100%;">
 
-          <p>This is the GPT with Context Plugin.<p>
-          <p>It enables to chat with GPT whilst sending all your files to provide some context.</p>
+            <div style="flex-grow:1;padding-left:20px;padding-right:20px;padding-top:0px;padding-bottom:16px;">
+              <div id="welcome">
+                <p>Welcome to GPT with Context!<p>
+                <p>Utilize the full 128k context power by sending all your files to GPT.</p>
+              </div>
+              <div id="chat"></div>
+            </div>
 
-          <div>
-            <vscode-text-field
-              id="question_field"
-              placeholder="Ask me anything..."
-              style="width:100%;"
-            >
-            </vscode-text-field>
-          </div>
+            <div style="padding-left:20px;padding-right:20px;padding-top:8px;padding-bottom:8px;width:100%;box-sizing:border-box;">
+              <div>
+                <vscode-text-field
+                  id="question_field"
+                  placeholder="Ask me anything..."
+                  autofocus
+                  style="width:100%;"
+                >
+                </vscode-text-field>
+              </div>
 
-          <div style="margin-top:2px">
-            <vscode-text-field
-              id="files_to_include_field"
-              placeholder="e.g. *.ts, src/**/include"
-              value="${filesToInclude}"
-              style="width:100%;"
-            >
-              <span style="font-size:0.8em;">files to include</span>
-            </vscode-text-field>
-            <vscode-text-field
-              id="files_to_exclude_field"
-              placeholder="e.g. *.ts, src/**/exclude"
-              value="${filesToExclude}"
-              style="width:100%;"
-            >
-              <span style="font-size:0.8em;">files to exclude</span>
-            </vscode-text-field>
-          </div>
+              <div style="margin-top:2px">
+                <vscode-text-field
+                  id="files_to_include_field"
+                  placeholder="e.g. *.ts, src/**/include"
+                  value="${filesToInclude}"
+                  style="width:100%;"
+                >
+                  <span style="font-size:0.8em;">files to include</span>
+                </vscode-text-field>
+                <vscode-text-field
+                  id="files_to_exclude_field"
+                  placeholder="e.g. *.ts, src/**/exclude"
+                  value="${filesToExclude}"
+                  style="width:100%;"
+                >
+                  <span style="font-size:0.8em;">files to exclude</span>
+                </vscode-text-field>
+              </div>
 
-          <div style="margin-top:4px">
-            <span id="file_count">0</span> files
+              <div style="margin-top:4px">
+                <span id="file_count">0</span> files
+              </div>
+            </div>
+          
           </div>
           
 
