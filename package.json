@@ -15,7 +15,7 @@
     "commands": [
       {
         "command": "gpt-with-context.setOpenAIAPIKey",
-        "title": "Set OpenAI API Key"
+        "title": "GPT with Context: Set OpenAI API Key"
       }
     ],
     "viewsContainers": {

@@ -45,7 +45,7 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
         <body style="height:100%;margin:0;padding:0;">
           <div style="display:flex;flex-direction:column;align-items:flex-start;height:100%;">
 
-            <div style="flex-grow:1;padding-left:20px;padding-right:13px;padding-top:0px;padding-bottom:16px;">
+            <div style="flex-grow:1;padding-left:20px;padding-right:13px;padding-top:0px;padding-bottom:16px;overflow-y:auto;">
               <div id="welcome">
                 <p>Welcome to GPT with Context!</p>
                 <p>Utilize the large context power by sending all your files to GPT.</p>
@@ -55,7 +55,7 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
 
             <div style="padding-left:20px;padding-right:13px;padding-top:8px;padding-bottom:8px;width:100%;box-sizing:border-box;">
               <div>
-                <vscode-text-field
+                <vscode-text-area
                   id="question_field"
                   placeholder="Ask me anything..."
                   autofocus
