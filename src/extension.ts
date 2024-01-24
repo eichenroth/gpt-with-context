@@ -3,6 +3,7 @@ import { NonPersistentState, PersistentState, State } from './State';
 import { gitignore2glob } from './gitignore2glob';
 
 type FileMeta = { file: vscode.Uri; locCount: number; charCount: number; };
+// type Chat = { question: string; answer: string; };
 
 class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
   constructor(
@@ -33,15 +34,15 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
         <body style="height:100%;margin:0;padding:0;">
           <div style="display:flex;flex-direction:column;align-items:flex-start;height:100%;">
 
-            <div style="flex-grow:1;padding-left:20px;padding-right:20px;padding-top:0px;padding-bottom:16px;">
+            <div style="flex-grow:1;padding-left:20px;padding-right:13px;padding-top:0px;padding-bottom:16px;">
               <div id="welcome">
                 <p>Welcome to GPT with Context!</p>
                 <p>Utilize the full 128k context power by sending all your files to GPT.</p>
               </div>
-              <div id="chat"></div>
+              <div style="display:none;" id="chat"></div>
             </div>
 
-            <div style="padding-left:20px;padding-right:20px;padding-top:8px;padding-bottom:8px;width:100%;box-sizing:border-box;">
+            <div style="padding-left:20px;padding-right:13px;padding-top:8px;padding-bottom:8px;width:100%;box-sizing:border-box;">
               <div>
                 <vscode-text-field
                   id="question_field"
