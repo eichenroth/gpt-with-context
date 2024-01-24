@@ -1,8 +1,10 @@
 {
   "name": "gpt-with-context",
   "displayName": "GPT with Context",
-  "description": "",
-  "version": "0.0.1",
+  "description": "Use the full GPT power by sending all your code into the context.",
+  "publisher": "Canida",
+  "repository": "https://github.com/eichenroth/gpt-with-context",
+  "version": "0.0.1-beta",
   "engines": {
     "vscode": "^1.85.0"
   },
