@@ -4,9 +4,9 @@ This extension allows you to utilize the large context windows by sending a bunc
 
 ## Features
 
-- ✅ **Large Context Power:** Send all your code to GPT to take advantage of its large context.
-- ✅ **Flexible File Selection:** Specify files to include or exclude during interactions.
-- ✅ **Bring Your Key:** Bind your own API key that supports GPT4-turbo.
+✅ **Large Context Power:** Send all your code to GPT to take advantage of its large context.  
+✅ **Flexible File Selection:** Specify files to include or exclude during interactions.  
+✅ **Bring Your Key:** Bind your own API key that supports GPT4-turbo.  
 
 ## Getting Started
 
