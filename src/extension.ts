@@ -235,7 +235,7 @@ export const activate = (context: vscode.ExtensionContext) => {
   const ask = async (question: string) => {
     const apiKey = await context.secrets.get('gpt-with-context.openAIAPIKey');
     if (!apiKey) {
-      vscode.window.showErrorMessage('OpenAI API Key not set');
+      vscode.window.showErrorMessage('OpenAI API key not set. Please set it with the command "GPT with Context: Set OpenAI API Key"');
       return;
     }
     chatState.setValue({ question, answer: '...' });
@@ -295,11 +295,16 @@ export const activate = (context: vscode.ExtensionContext) => {
 
   context.subscriptions.push(
     vscode.commands.registerCommand('gpt-with-context.setOpenAIAPIKey', async () => {
-      const apiKey = await vscode.window.showInputBox({ prompt: 'OpenAI API Key', password: true });
+      const apiKey = await vscode.window.showInputBox({ prompt: 'OpenAI API key', password: true });
       if (!apiKey) { return; }
       await context.secrets.store('gpt-with-context.openAIAPIKey', apiKey);
     })
   );
+  context.subscriptions.push(
+    vscode.commands.registerCommand('gpt-with-context.removeOpenAIAPIKey', async () => {
+      await context.secrets.delete('gpt-with-context.openAIAPIKey');
+    }
+  ));
 };
 
 export const deactivate = () => {};

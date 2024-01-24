@@ -16,6 +16,10 @@
       {
         "command": "gpt-with-context.setOpenAIAPIKey",
         "title": "GPT with Context: Set OpenAI API Key"
+      },
+      {
+        "command": "gpt-with-context.removeOpenAIAPIKey",
+        "title": "GPT with Context: Remove OpenAI API Key"
       }
     ],
     "viewsContainers": {
