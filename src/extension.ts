@@ -2,17 +2,28 @@ import * as vscode from 'vscode';
 import { NonPersistentState, PersistentState, State } from './State';
 import { gitignore2glob } from './gitignore2glob';
 
+const getChatGPTAPI = async (apiKey: string) => {
+  const chatgpt = (await import('chatgpt'));
+  return new chatgpt.ChatGPTAPI({
+    apiKey,
+    completionParams: { model: 'gpt-4-1106-preview' },
+  });
+};
+
+type FileContent = { file: vscode.Uri; content: string; };
 type FileMeta = { file: vscode.Uri; locCount: number; charCount: number; };
-// type Chat = { question: string; answer: string; };
+type Chat = { question: string; answer: string; };
 
 class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
   constructor(
 		private readonly _context: vscode.ExtensionContext,
+    private readonly _ask: (question: string) => void,
     private readonly _filesToIncludeState: State<string>,
     private readonly _filesToExcludeState: State<string>,
     private readonly _filesState: State<vscode.Uri[]>,
     private readonly _filesMetasState: State<FileMeta[]>,
-    private readonly _search: () => void,
+    private readonly _chatState: State<Chat | undefined>,
+    private readonly _searchFiles: () => void,
   ) {}
 
   resolveWebviewView(webviewView: vscode.WebviewView) {
@@ -37,7 +48,7 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
             <div style="flex-grow:1;padding-left:20px;padding-right:13px;padding-top:0px;padding-bottom:16px;">
               <div id="welcome">
                 <p>Welcome to GPT with Context!</p>
-                <p>Utilize the full 128k context power by sending all your files to GPT.</p>
+                <p>Utilize the large context power by sending all your files to GPT.</p>
               </div>
               <div style="display:none;" id="chat"></div>
             </div>
@@ -90,11 +101,14 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
             const locCountDisplay = document.getElementById('loc_count');
             const charCountDisplay = document.getElementById('char_count');
 
+            const welcomeDisplay = document.getElementById('welcome');
+            const chatDisplay = document.getElementById('chat');
+
             questionField.addEventListener('keyup', (event) => {
               if (event.key !== 'Enter') { return; }
               if (event.shiftKey) { return; }
               vscode.postMessage({
-                command: 'question',
+                command: 'setQuestion',
                 text: questionField.value,
               });
               questionField.value = '';
@@ -110,7 +124,7 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
             filesToIncludeField.addEventListener('keyup', (event) => {
               if (event.key !== 'Enter') { return; }
               if (event.shiftKey) { return; }
-              vscode.postMessage({ command: 'triggerSearch' });
+              vscode.postMessage({ command: 'searchFiles' });
               event.preventDefault();
             });
             filesToExcludeField.addEventListener('input', (event) => {
@@ -122,7 +136,7 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
             filesToExcludeField.addEventListener('keyup', (event) => {
               if (event.key !== 'Enter') { return; }
               if (event.shiftKey) { return; }
-              vscode.postMessage({ command: 'triggerSearch' });
+              vscode.postMessage({ command: 'searchFiles' });
               event.preventDefault();
             });
 
@@ -135,7 +149,17 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
                 locCountDisplay.innerHTML = message.value.reduce((sum, fileMeta) => sum + fileMeta.locCount, 0).toString();
                 charCountDisplay.innerHTML = message.value.reduce((sum, fileMeta) => sum + fileMeta.charCount, 0).toString();
               }
+              if (message.command === 'setChat') {
+                const chat = message.value;
+                if (!chat) { return; }
+                welcomeDisplay.style.display = 'none';
+                chatDisplay.style.display = 'block';
+                chatDisplay.innerHTML = \`<p>Q: \${chat.question}</p><p>A: \${chat.answer}</p>\`;
+              }
             });
+
+            // trigger search once
+            vscode.postMessage({ command: 'searchFiles' });
 
           </script>
         </body>
@@ -143,10 +167,10 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
     `;
 
     webviewView.webview.onDidReceiveMessage((message) => {
-      if (message.command === 'question') { this._showQuestion(message.text); }
+      if (message.command === 'setQuestion') { this._ask(message.text); }
       if (message.command === 'setFilesToInclude') { this._filesToIncludeState.setValue(message.value); }
       if (message.command === 'setFilesToExclude') { this._filesToExcludeState.setValue(message.value); }
-      if (message.command === 'triggerSearch') { this._search(); }
+      if (message.command === 'searchFiles') { this._searchFiles(); }
     });
 
     this._filesState.subscribe((files) => {
@@ -155,10 +179,9 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
     this._filesMetasState.subscribe((filesMetas) => {
       webviewView.webview.postMessage({ command: 'setFilesMetas', value: filesMetas });
     });
-  }
-
-  private _showQuestion(question: string) {
-    vscode.window.showInformationMessage('Question: ' + question);
+    this._chatState.subscribe((chat) => {
+      webviewView.webview.postMessage({ command: 'setChat', value: chat });
+    });
   }
 }
 
@@ -201,6 +224,7 @@ export const activate = (context: vscode.ExtensionContext) => {
   const filesToExcludeState = new PersistentState<string>(context, FILES_TO_EXCLUDE_KEY, '');
   const filesState = new NonPersistentState<vscode.Uri[]>([]);
   const filesMetasState = new NonPersistentState<FileMeta[]>([]);
+  const chatState = new NonPersistentState<Chat | undefined>(undefined);
 
   const search = async () => {
     const filesToInclude = filesToIncludeState.getValue();
@@ -208,8 +232,52 @@ export const activate = (context: vscode.ExtensionContext) => {
     filesState.setValue(await findFiles(filesToInclude, filesToExclude));
   };
 
+  const ask = async (question: string) => {
+    const apiKey = await context.secrets.get('gpt-with-context.openAIAPIKey');
+    if (!apiKey) {
+      vscode.window.showErrorMessage('OpenAI API Key not set');
+      return;
+    }
+    chatState.setValue({ question, answer: '...' });
+
+    const files = await findFiles(filesToIncludeState.getValue(), filesToExcludeState.getValue());
+    const fileContents = await getFileContents(files);
+
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0].uri.path ?? '';
+    fileContents.map((fileContent) => {
+      const fileName = fileContent.file.path.replace(workspaceFolder, '');
+      return `File: ${fileName}\n${fileContent.content}\n`;
+    });
+
+    const questionWithFiles = `${question}\n\n${
+      fileContents.map((fileContent) => {
+        const fileName = fileContent.file.path.replace(workspaceFolder, '');
+        return `File: ${fileName}\n${fileContent.content}\n`;
+      }).join('\n')
+    }`;
+
+    const chatgpt = await getChatGPTAPI(apiKey);
+    try {
+      const answer = await chatgpt.sendMessage(questionWithFiles, {
+        onProgress: (partialAnswer) => {
+          chatState.setValue({ question, answer: partialAnswer.text });
+        }
+      });
+      chatState.setValue({ question, answer: answer.text });
+    } catch (error) {
+      vscode.window.showErrorMessage(error!.toString());
+    }
+  };
+
   const searchViewProvider = new GPTWithContextSearchViewProvider(
-    context, filesToIncludeState, filesToExcludeState, filesState, filesMetasState, search,
+    context,
+    ask,
+    filesToIncludeState,
+    filesToExcludeState,
+    filesState,
+    filesMetasState,
+    chatState,
+    search,
   );
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('gpt-with-context.MainView', searchViewProvider)
@@ -225,15 +293,11 @@ export const activate = (context: vscode.ExtensionContext) => {
 
   filesState.subscribe(async (files) => { filesMetasState.setValue(await getFileMetas(files)); });
 
-  // TODO: remove
   context.subscriptions.push(
-    vscode.commands.registerCommand('gpt-with-context.testCommand', () => {
-      vscode.window.showInformationMessage('testcommand');
-    })
-  );
-  context.subscriptions.push(
-    vscode.commands.registerCommand('gpt-with-context.helloWorld', () => {
-      vscode.window.showInformationMessage('Hello World from GPT with Context!');
+    vscode.commands.registerCommand('gpt-with-context.setOpenAIAPIKey', async () => {
+      const apiKey = await vscode.window.showInputBox({ prompt: 'OpenAI API Key', password: true });
+      if (!apiKey) { return; }
+      await context.secrets.store('gpt-with-context.openAIAPIKey', apiKey);
     })
   );
 };
@@ -255,6 +319,15 @@ const findFiles = async (include: string, exclude: string): Promise<vscode.Uri[]
   const extraIgnore = '**/.gitignore,**/.git/**';
   const files = await vscode.workspace.findFiles(`{${include}}`, `{${exclude},${ignore},${extraIgnore}}`);
   return files;
+};
+
+const getFileContents = async (files: vscode.Uri[]): Promise<FileContent[]> => {
+  return await Promise.all(
+    files.map(async (file) => {
+      const content = (await vscode.workspace.fs.readFile(file)).toString();
+      return { file, content };
+    }
+  ));
 };
 
 const getFileMetas = async (files: vscode.Uri[]): Promise<FileMeta[]> => {
