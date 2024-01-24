@@ -18,7 +18,7 @@ This extension allows you to utilize the large context windows by sending a bunc
 We welcome your feedback and contributions. Report any issues or suggest enhancements on the
 [Github repository](https://github.com/eichenroth/gpt-with-context).
 
-If you like feel free to rate it on the VSCode Marketplace or star it on [Github](https://github.com/eichenroth/gpt-with-context/stargazers).
+If you like feel free to rate it on the VSCode Marketplace or star it on Github.
 
 ## License
 This extension is licensed under the MIT License. Feel free to modify and distribute it according to the terms of the license.
