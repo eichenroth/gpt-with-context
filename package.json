@@ -2,9 +2,9 @@
   "name": "gpt-with-context",
   "displayName": "GPT with Context",
   "description": "Use the full GPT power by sending all your code into the context.",
-  "publisher": "Friedrich Eichenroth",
+  "publisher": "eichenroth",
   "repository": "https://github.com/eichenroth/gpt-with-context",
-  "version": "0.0.1-beta",
+  "version": "0.0.1",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -57,7 +57,8 @@
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "publish": "vsce publish"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.6",
