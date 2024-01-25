@@ -2,7 +2,7 @@
   "name": "gpt-with-context",
   "displayName": "GPT with Context",
   "description": "Use the full GPT power by sending all your code into the context.",
-  "publisher": "Canida",
+  "publisher": "Friedrich Eichenroth",
   "repository": "https://github.com/eichenroth/gpt-with-context",
   "version": "0.0.1-beta",
   "engines": {
