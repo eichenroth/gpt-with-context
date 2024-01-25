@@ -4,6 +4,7 @@
   "description": "Use the full GPT power by sending all your code into the context.",
   "publisher": "eichenroth",
   "repository": "https://github.com/eichenroth/gpt-with-context",
+  "icon": "media/gpt-with-context-icon.png",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.85.0"
