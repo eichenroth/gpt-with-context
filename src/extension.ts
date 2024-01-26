@@ -1,14 +1,7 @@
 import * as vscode from 'vscode';
 import { NonPersistentState, PersistentState, State } from './State';
-import { gitignore2glob } from './gitignore2glob';
-
-const getChatGPTAPI = async (apiKey: string) => {
-  const chatgpt = (await import('chatgpt'));
-  return new chatgpt.ChatGPTAPI({
-    apiKey,
-    completionParams: { model: 'gpt-4-1106-preview' },
-  });
-};
+import { gitignore2glob } from './utils/gitignore2glob';
+import { chatgpt } from './utils/chatgpt';
 
 type FileContent = { file: vscode.Uri; content: string; };
 type FileMeta = { file: vscode.Uri; locCount: number; charCount: number; };
@@ -241,27 +234,19 @@ export const activate = (context: vscode.ExtensionContext) => {
     chatState.setValue({ question, answer: '...' });
 
     const files = await findFiles(filesToIncludeState.getValue(), filesToExcludeState.getValue());
-    const fileContents = await getFileContents(files);
-
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0].uri.path ?? '';
-    fileContents.map((fileContent) => {
+    
+    const fileContents = await getFileContents(files);
+    const fileString = fileContents.map((fileContent) => {
       const fileName = fileContent.file.path.replace(workspaceFolder, '');
-      return `File: ${fileName}\n${fileContent.content}\n`;
-    });
+      return `File: ${fileName}\n\`\`\`\n${fileContent.content}\`\`\`\n`;
+    }).join('\n');
 
-    const questionWithFiles = `${question}\n\n${
-      fileContents.map((fileContent) => {
-        const fileName = fileContent.file.path.replace(workspaceFolder, '');
-        return `File: ${fileName}\n${fileContent.content}\n`;
-      }).join('\n')
-    }`;
+    const chat = chatgpt({ apiKey, completionParams: { model: 'gpt-4-1106-preview' } });
 
-    const chatgpt = await getChatGPTAPI(apiKey);
     try {
-      const answer = await chatgpt.sendMessage(questionWithFiles, {
-        onProgress: (partialAnswer) => {
-          chatState.setValue({ question, answer: partialAnswer.text });
-        }
+      const answer = await chat.send(`${fileString}\n\n${question}`, {
+        onProgress: (answer) => { chatState.setValue({ question, answer: answer.text }); },
       });
       chatState.setValue({ question, answer: answer.text });
     } catch (error) {
