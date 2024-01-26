@@ -10,3 +10,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - Include and exclude files
 - Set OpenAI API key
 - Ask one question, get one answer, no followups
+
+### `0.0.4` beta (Jan. 26, 24)
+
+- Remove no-answer bug for large context sizes
