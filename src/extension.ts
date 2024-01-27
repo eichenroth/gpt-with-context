@@ -35,6 +35,17 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
       <html style="height:100%;">
         <head>
           <script src="${scriptUri}"></script>
+          <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.0.0/dist/markdown-it.min.js"></script>
+          <style>
+            .chat .label {
+              text-transform: uppercase;
+              font-size: 0.8em;
+              margin-top: 16px;
+            }
+            .chat .question { margin-bottom: 20px; }
+            .chat .answer { margin-bottom: 20px; }
+          </style>
+        
         </head>
         <body style="height:100%;margin:0;padding:0;">
           <div style="display:flex;flex-direction:column;align-items:flex-start;height:100%;">
@@ -44,7 +55,7 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
                 <p>Welcome to GPT with Context!</p>
                 <p>Utilize the large context power by sending all your files to GPT.</p>
               </div>
-              <div style="display:none;" id="chat"></div>
+              <div style="display:none;" id="chat" class="chat"></div>
             </div>
 
             <div style="padding-left:20px;padding-right:13px;padding-top:8px;padding-bottom:8px;width:100%;box-sizing:border-box;">
@@ -148,13 +159,14 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
                 if (!chat) { return; }
                 welcomeDisplay.style.display = 'none';
                 chatDisplay.style.display = 'block';
-                chatDisplay.innerHTML = \`<p>Q: \${chat.question}</p><p>A: \${chat.answer}</p>\`;
+
+                chatDisplay.innerHTML = '';
+                chatDisplay.innerHTML += \`<div class="label">User</div>\`;
+                chatDisplay.innerHTML += \`<div class="question"><p>\${chat.question}</p></div>\`;
+                chatDisplay.innerHTML += \`<div class="label">GPT</div>\`;
+                chatDisplay.innerHTML += \`<div class="answer">\${markdownit().render(chat.answer)}</div>\`;
               }
             });
-
-            // trigger search once
-            vscode.postMessage({ command: 'searchFiles' });
-
           </script>
         </body>
       </html>
@@ -164,7 +176,6 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
       if (message.command === 'setQuestion') { this._ask(message.text); }
       if (message.command === 'setFilesToInclude') { this._filesToIncludeState.setValue(message.value); }
       if (message.command === 'setFilesToExclude') { this._filesToExcludeState.setValue(message.value); }
-      if (message.command === 'searchFiles') { this._searchFiles(); }
     });
 
     this._filesState.subscribe((files) => {
@@ -176,6 +187,9 @@ class GPTWithContextSearchViewProvider implements vscode.WebviewViewProvider {
     this._chatState.subscribe((chat) => {
       webviewView.webview.postMessage({ command: 'setChat', value: chat });
     });
+
+    // trigger search once
+    this._searchFiles();
   }
 }
 
