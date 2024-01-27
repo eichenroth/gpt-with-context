@@ -301,7 +301,7 @@ const findFiles = async (include: string, exclude: string): Promise<vscode.Uri[]
   const includePattern = string2pattern(include);
   const excludePattern = string2pattern(exclude);
 
-  // TODO: use all gitignore files with '**/.gitinore'
+  // TODO: use all gitignore files with '**/.gitignore'
   const ignoreFiles = await vscode.workspace.findFiles('.gitignore');
   const ignorePattern: string[] = [];
   if (ignoreFiles.length > 0) {
