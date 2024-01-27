@@ -1,6 +1,6 @@
 // inspired by https://github.com/EE/gitignore-to-glob
 
-export const gitignore2glob = (gitignore: string) => {
+export const gitignore2pattern = (gitignore: string) => {
   return gitignore
     .split(/\r?\n/)
     .map((line) => line.trim())

@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { NonPersistentState, PersistentState, State } from './State';
-import { gitignore2glob } from './utils/gitignore2glob';
+import { gitignore2pattern } from './utils/gitignore2pattern';
 import { chatgpt } from './utils/chatgpt';
+import { string2pattern } from './utils/string2pattern';
 
 type FileContent = { file: vscode.Uri; content: string; };
 type FileMeta = { file: vscode.Uri; locCount: number; charCount: number; };
@@ -296,18 +297,25 @@ export const deactivate = () => {};
 
 const findFiles = async (include: string, exclude: string): Promise<vscode.Uri[]> => {
   console.info('finding files', {include, exclude});
-  
-  // TODO: use all gitignore files with '**/.gitinore'
+
+  const includePattern = string2pattern(include);
+  const excludePattern = string2pattern(exclude);
+
+  // TODO: use all gitignore files with '**/.gitignore'
   const ignoreFiles = await vscode.workspace.findFiles('.gitignore');
-  let ignore = '';
+  const ignorePattern: string[] = [];
   if (ignoreFiles.length > 0) {
     const ignoreContent = (await vscode.workspace.fs.readFile(ignoreFiles[0])).toString();
-    ignore = gitignore2glob(ignoreContent).join(',');
+    ignorePattern.push(...gitignore2pattern(ignoreContent));
   }
-  console.info('ignore from gitignore', { ignore });
+  const extraIgnorePattern = ['**/.gitignore', '**/.git/**'];
 
-  const extraIgnore = '**/.gitignore,**/.git/**';
-  const files = await vscode.workspace.findFiles(`{${include}}`, `{${exclude},${ignore},${extraIgnore}}`);
+  const files = await vscode.workspace.findFiles(
+    `{${includePattern.join(',')}}`,
+    `{${excludePattern.join(',')},${ignorePattern.join(',')},${extraIgnorePattern.join(',')}}`,
+    1000
+  );
+
   return files;
 };
 
