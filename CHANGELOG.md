@@ -14,3 +14,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 ### `0.0.4` beta (Jan. 26, 24)
 
 - Remove no-answer bug for large context sizes
+
+### `0.0.5` beta (Jan. 27, 24)
+
+- fix search behaviour to match VSCode search
+- add markdown
