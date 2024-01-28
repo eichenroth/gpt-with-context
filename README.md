@@ -1,8 +1,10 @@
 # GPT with Context
 
-This extension allows you to utilize the large context windows by sending a bunch of files into your chat.
+This extension allows you to utilize the large context windows of GPT by selecting and sending a bunch of files into your chat.
 
 ![Screenshot](docs/screenshot.png)
+
+No more copying and pasting into ChatGPT!
 
 ## Features
 
